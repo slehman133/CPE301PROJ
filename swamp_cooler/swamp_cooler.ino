@@ -1,6 +1,6 @@
 /**************************************************************************************************************************************
 FILENAME: swamp_cooler.ino
-AUTHOR: Samuel Lehman, Gordan Tan, Andrew Cunnignham
+AUTHOR: Samuel Lehman, Gordan Tan
 DATE: 12/5/2021
 DESCRIPTION: code for a swamp cooler
 
