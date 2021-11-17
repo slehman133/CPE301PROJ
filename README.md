@@ -1,2 +1,2 @@
 # CPE301PROJ
-Project for CPE 301
+Team Members: Gordon Tan, Samuel Lehman
