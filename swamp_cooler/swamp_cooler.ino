@@ -45,20 +45,40 @@ The system should transition to the ERROR state if water becomes too low
 // for lcd1602
 #include <LiquidCrystal.h>
 
+// for motor
+#include <Servo.h>
+
 // for dth11
 #include <Adafruit_10DOF.h>
 #include <DHT.h>
+
+// for rDS1307 RTC (real time clock)
+#include <RTC.h>
 
 // prototypes
 void displayHumidTemp();
 void checkWaterLevel(int);
 int getState();
+void disabled_state();
+void idle_state();
+void error_state();
+void running_state();
+void adc_init();
+void clearLEDS();
+bool getDisabledState();
+unsigned int adc_read();
+
 
 // TODO set DHT input pin, water sensor input 
 // definitions
 #define DHT_IPIN A0 // placeholder
 #define WATER_SENSOR_INPUT A1 // placeholder
 #define WATER_LEVEL_THRESHOLD 50
+#define TEMP_HIGH_THRESHOLD 80
+#define YELLOW_LED_PIN
+#define GREEN_LED_PIN
+#define RED_LED_PIN
+#define BLUE_LED_PIN
 
 // TODO set pin values for lcd
 // creates object lcd(pins)
@@ -89,18 +109,48 @@ void setup() {
 
 void loop() {
   int waterLevel = adc_read(WATER_SENSOR_INPUT);
-  int state = getState();
-  // 0 error, 1 running, 2 idle, 3 disabled
-  if(state == 0){
-    displayHumidTemp();
-  }else if(state == 1){
-    displayHumidTemp();
-  }else if (state == 2){
-    displayHumidTemp();
-  }else if (state == 3){
+  int tempState;
 
-  }else{}
-  
+  bool isDisabled = getDisabledState();
+  bool isRunning = false;
+  bool isIdle = false;
+  bool isError = false;
+
+  int state = getState();
+  if(!isDisabled){
+    clearLEDS();
+    do{
+      tempState = getState();
+      switch(state){
+        // error 
+        case 0:
+          isError = true;
+          error_state();
+          // TODO set error LED high
+          if(getDisabledState()) state = 3; // if disabled, go to disabled state
+          break;
+        // running
+        case 1:
+          isRunning = true;
+          running_state();  
+          // TODO set running LED high
+          if(getDisabledState()) state = 3;
+          break;
+        // idle
+        case 2:
+          isIdle = true;
+          idle_state();
+          // TODO set idle LED high
+          if(getDisabledState()) state = 3;
+          break;
+      }
+    }while(state == tempState);
+    clearLEDS();
+  }else{
+    disabled_state();
+    //TODO set disabled LED high
+    state = getState();
+  }
 }
 
 void displayHumidTemp(){
@@ -112,62 +162,45 @@ void displayHumidTemp(){
   lcd.setCursor(0,1);
   lcd.print("Humid: ");
   lcd.print(h);
-  delay(500);
 }
 
 void checkWaterLevel(int waterLevel){
   if (waterLevel < 100){
     Serial.print("WARNING: Water level low");
   }
-  delay(500);
 }
 
 int getState(){
   int waterLevel = adc_read(WATER_SENSOR_INPUT);
-  float h = dht.readHumidity();
   float t = dht.readTemperature();
   dht.read(DHT_IPIN);
-  if (waterLevel < WATER_LEVEL_THRESHOLD){
+  if(waterLevel < WATER_LEVEL_THRESHOLD){
     // error
     return 0;
-  }
-  else if (t > 30){
+  }else if(t > TEMP_HIGH_THRESHOLD){
     // running
     return 1;
-  }
-  else if (t < 20){
+  }else if(waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD){
     // idle
     return 2;
-  }
-  else if (h > 80){
-    // running  
-    return 1;
-  }
-  else if (h < 60){
-    // idle
-    return 2;
-  }
-  else{
-    // disabled
-    return 3;
   }
 }
 
 /* States */
 void disabled_state(){
-  
+  // TODO add code to send date from realtime clock to host computer
 }
 
 void idle_state(){
-  
+  displayHumidTemp();
 }
 
 void error_state(){
-  
+  displayHumidTemp();
 }
 
 void running_state(){
-  
+  displayHumidTemp();
 }
 
 /* Analog/Digital Conversion */
@@ -189,8 +222,7 @@ void adc_init() {
   *my_ADMUX &= 0b11100000; // Clear Bits 4-0
 }
 
-unsigned int adc_read(unsigned char adc_channel_num)
-{
+unsigned int adc_read(unsigned char adc_channel_num){
   // Clear Analog channel selection bits
   *my_ADMUX &= 0b11100000;
   *my_ADMUX &= 0b11011111;
@@ -205,4 +237,13 @@ unsigned int adc_read(unsigned char adc_channel_num)
   // Wait for conversion to complete and return result
   while ((*my_ADCSRA & 0x40) != 0);
   return pow(2 * (*my_ADCH_DATA & (1 << 0)), 8) + pow(2 * (*my_ADCH_DATA & (1 << 1)), 9) + *my_ADCL_DATA; 
+}
+
+void clearLEDS(){
+  // TODO add code to turn off all LEDs set them low
+}
+
+bool getDisabledState(){
+  //TODO add code to check if disabled button is pressed
+  return false;
 }
