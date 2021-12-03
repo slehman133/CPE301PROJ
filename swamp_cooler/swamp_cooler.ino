@@ -86,7 +86,9 @@ void setServoPos();
 
 // global variables
 int servoPos = 0;
-int dis_en_btn_state = 0;
+
+// 0 means disabled, 1 means enabled
+int dis_en_btn_state = 1;
 
 // TODO set pin values for lcd
 // creates object lcd(pins)
@@ -95,6 +97,7 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 DHT dht(DHT_IPIN, DHT11);
 Servo myServo(SERVO_PIN);
 DS1307 rtc;
+RTCDateTime dt;
 
 // DIGITAL PORT B REGISTERS
 volatile unsigned char *portB = (unsigned char *)0x25;
@@ -118,10 +121,17 @@ void setup()
   *portDDRB &= 0b01111111;
   *portDDRB |= 0b01111110;
   rtc.begin();
+  clock.setTime(__DATE__, __TIME__);
 }
 
 void loop()
 {
+  displayHumidTemp();
+  // digitalWrite(GREEN_LED_PIN, HIGH);
+  // digitalWrite(RED_LED_PIN, HIGH);
+  // digitalWrite(BLUE_LED_PIN, HIGH);
+  // digitalWrite(YELLOW_LED_PIN, HIGH);
+  delay(500);
   int waterLevel = analogRead(WATER_SENSOR_INPUT);
   checkWaterLevel(waterLevel);
   int tempState;
@@ -156,11 +166,12 @@ void loop()
         idle_state();
         break;
       case 3:
+        disabled_state();
         isDisabled = true;
         break;
       }
       delay(500);
-    } while (state == tempState);
+    } while (state != tempState);
     clearLEDS();
   }
   else
@@ -170,26 +181,29 @@ void loop()
     delay(500);
   }
 }
+}
 
 void displayHumidTemp()
 {
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   dht.read(DHT_IPIN);
-  lcd.setCursor(0,0);
+  lcd.setCursor(0, 0);
   lcd.print("Temp: ");
   lcd.print(t);
   lcd.setCursor(0, 1);
   lcd.print("Humid: ");
   lcd.print(h);
-  Serial.print(h);
+  Serial.print("Temp: ");
   Serial.print(t);
+  Serial.print("Humid: ");
+  Serial.print(h);
   delay(500);
 }
 
 void checkWaterLevel(int waterLevel)
 {
-  if (waterLevel < 100)
+  if (waterLevel < 20)
   {
     Serial.print("WARNING: Water level low");
     Serial.print("\t");
@@ -205,11 +219,8 @@ int getState()
   int waterLevel = analogRead(WATER_SENSOR_INPUT);
   float t = dht.readTemperature();
   dht.read(DHT_IPIN);
-  if (getDisabledState)
-  {
-    return 3;
-  }
-  else if (waterLevel < WATER_LEVEL_THRESHOLD)
+
+  /*if (waterLevel < WATER_LEVEL_THRESHOLD)
   {
     // error
     return 0;
@@ -218,11 +229,25 @@ int getState()
   {
     // running
     return 1;
-  }
-  else if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
+  }*/
+  if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
   {
     // idle
     return 2;
+  }
+  else if (waterLevel > WATER_LEVEL_THRESHOLD && t > TEMP_HIGH_THRESHOLD)
+  {
+    // running
+    return 1;
+  }
+  else if (waterLevel < WATER_LEVEL_THRESHOLD)
+  {
+    // error
+    return 0;
+  }
+  else if (getDisabledState)
+  {
+    return 3;
   }
 }
 
@@ -306,6 +331,7 @@ void clearLEDS()
 bool getDisabledState()
 {
   int btnPushed = digitalRead(DIS_EN_BTN_PIN);
+  Serial.print(btnPushed);
   if (btnPushed == HIGH && dis_en_btn_state == 1)
   {
     dis_en_btn_state = 0;
@@ -320,9 +346,19 @@ bool getDisabledState()
 
 void setSevoPosition()
 {
-  // TODO add code to get position of servo
-  // have one button increment and another decrement
-  //  myServo.write(servoPos);
+  int incBtn = digitalRead(INCREMENT_SERVO_ANGLE);
+  int decBtn = digitalRead(DECREMENT_SERVO_ANGLE);
+
+  if (incBtn == HIGH)
+  {
+    if (servoPos <= 180)
+      servoPos++;
+  }
+  if (decBtn == HIGH)
+  {
+    if (servoPos >= 0)
+      servoPos--;
+  }
 }
 
 // void printTime(){
