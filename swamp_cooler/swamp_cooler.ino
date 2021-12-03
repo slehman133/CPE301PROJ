@@ -69,23 +69,24 @@ bool getDisabledState();
 unsigned int adc_read(unsigned char);
 void setServoPos();
 
-
 // TODO set all pins
 // definitions
 #define DHT_IPIN A1
 #define WATER_SENSOR_INPUT A0
 #define WATER_LEVEL_THRESHOLD 50
 #define TEMP_HIGH_THRESHOLD 80
-#define YELLOW_LED_PIN 
-#define GREEN_LED_PIN 
-#define RED_LED_PIN 
-#define BLUE_LED_PIN 
+#define DIS_EN_BTN_PIN A2
+#define YELLOW_LED_PIN 9
+#define GREEN_LED_PIN 8
+#define RED_LED_PIN 7
+#define BLUE_LED_PIN 6
 #define INCREMENT_SERVO_ANGLE
 #define DECREMENT_SERVO_ANGLE
-#define SERVO_PIN 
+#define SERVO_PIN
 
 // global variables
 int servoPos = 0;
+int dis_en_btn_state = 0;
 
 // TODO set pin values for lcd
 // creates object lcd(pins)
@@ -95,20 +96,20 @@ DHT dht(DHT_IPIN, DHT11);
 Servo myServo(SERVO_PIN);
 DS1307 rtc;
 
-
 // DIGITAL PORT B REGISTERS
-volatile unsigned char* portB = (unsigned char*) 0x25;
-volatile unsigned char* portDDRB = (unsigned char*) 0x24;
-volatile unsigned char* pinB = (unsigned char*) 0x23;
+volatile unsigned char *portB = (unsigned char *)0x25;
+volatile unsigned char *portDDRB = (unsigned char *)0x24;
+volatile unsigned char *pinB = (unsigned char *)0x23;
 
 // ANALOG
-volatile unsigned char* my_ADMUX = (unsigned char*) 0x7C;
-volatile unsigned char* my_ADCSRB = (unsigned char*) 0x7B;
-volatile unsigned char* my_ADCSRA = (unsigned char*) 0x7A;
-volatile unsigned int* my_ADCH_DATA = (unsigned int*) 0x79;
-volatile unsigned int* my_ADCL_DATA = (unsigned int*) 0x78;
+volatile unsigned char *my_ADMUX = (unsigned char *)0x7C;
+volatile unsigned char *my_ADCSRB = (unsigned char *)0x7B;
+volatile unsigned char *my_ADCSRA = (unsigned char *)0x7A;
+volatile unsigned int *my_ADCH_DATA = (unsigned int *)0x79;
+volatile unsigned int *my_ADCL_DATA = (unsigned int *)0x78;
 
-void setup() {
+void setup()
+{
   Serial.begin(9600);
   adc_init();
   lcd.begin(16, 2);
@@ -119,7 +120,8 @@ void setup() {
   rtc.begin();
 }
 
-void loop() {
+void loop()
+{
   int waterLevel = analogRead(WATER_SENSOR_INPUT);
   checkWaterLevel(waterLevel);
   int tempState;
@@ -130,46 +132,54 @@ void loop() {
 
   int state = getState();
   bool isDisabled = getDisabledState();
-  if(!isDisabled){
-//    printTime();
+  if (!isDisabled)
+  {
     clearLEDS();
-    do{
+    do
+    {
       tempState = getState();
-      switch(state){
-        // error 
-        case 0:
-          isError = true;
-          error_state();
-          if(getDisabledState()) state = 3; // if disabled, go to disabled state
-          break;
-        // running
-        case 1:
-          isRunning = true;
-          running_state();  
-          if(getDisabledState()) state = 3;
-          break;
-        // idle
-        case 2:
-          isIdle = true;
-          idle_state();
-          if(getDisabledState()) state = 3;
-          break;
+      switch (state)
+      {
+      // error
+      case 0:
+        isError = true;
+        error_state();
+        break;
+      // running
+      case 1:
+        isRunning = true;
+        running_state();
+        break;
+      // idle
+      case 2:
+        isIdle = true;
+        idle_state();
+        break;
+      case 3:
+        isDisabled = true;
+        break;
       }
-    }while(state == tempState);
+      delay(500);
+    } while (state == tempState);
     clearLEDS();
-  }else{
+  }
+  else
+  {
     disabled_state();
     state = getState();
+    delay(500);
   }
 }
 
-void displayHumidTemp(){
+void displayHumidTemp()
+{
   float h = dht.readHumidity();
   float t = dht.readTemperature();
   dht.read(DHT_IPIN);
+  lcd.setCursor(0,0);
   lcd.print("Temp: ");
   lcd.print(t);
-  lcd.setCursor(0,1);
+  lcd.setCursor(0, 1);
   lcd.print("Humid: ");
   lcd.print(h);
   Serial.print(h);
@@ -177,8 +187,10 @@ void displayHumidTemp(){
   delay(500);
 }
 
-void checkWaterLevel(int waterLevel){
-  if (waterLevel < 100){
+void checkWaterLevel(int waterLevel)
+{
+  if (waterLevel < 100)
+  {
     Serial.print("WARNING: Water level low");
     Serial.print("\t");
     Serial.print("Current level: ");
@@ -188,53 +200,66 @@ void checkWaterLevel(int waterLevel){
   delay(500);
 }
 
-int getState(){
- int waterLevel = analogRead(WATER_SENSOR_INPUT);
- float t = dht.readTemperature();
- dht.read(DHT_IPIN);
- if(waterLevel < WATER_LEVEL_THRESHOLD){
-   // error
-   return 0;
- }else if(t > TEMP_HIGH_THRESHOLD){
-   // running
-   return 1;
- }else if(waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD){
-   // idle
-   return 2;
- }
+int getState()
+{
+  int waterLevel = analogRead(WATER_SENSOR_INPUT);
+  float t = dht.readTemperature();
+  dht.read(DHT_IPIN);
+  if (getDisabledState)
+  {
+    return 3;
+  }
+  else if (waterLevel < WATER_LEVEL_THRESHOLD)
+  {
+    // error
+    return 0;
+  }
+  else if (t > TEMP_HIGH_THRESHOLD)
+  {
+    // running
+    return 1;
+  }
+  else if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
+  {
+    // idle
+    return 2;
+  }
 }
 
 /* States */
-void disabled_state(){
+void disabled_state()
+{
   // TODO add code to send date from realtime rtc to host computer
-//  printTime();
+  //  printTime();
+  digitalWrite(YELLOW_LED_PIN, HIGH);
 }
 
-void idle_state(){
+void idle_state()
+{
   displayHumidTemp();
   setSevoPosition();
-  // set YELLOW LED high using registers
-  *portB |= 0b10000000;
+  digitalWrite(GREEN_LED_PIN, HIGH);
 }
 
-void error_state(){
+void error_state()
+{
   displayHumidTemp();
   setSevoPosition();
-  // set RED LED high using registers
-  *portB |= 0b01000000;
+  digitalWrite(RED_LED_PIN, HIGH);
 }
 
-void running_state(){
+void running_state()
+{
   displayHumidTemp();
   setSevoPosition();
-  // set green LED high using registers
-  *portB |= 0b00100000;
+  digitalWrite(BLUE_LED_PIN, HIGH);
 }
 
 /* Analog/Digital Conversion */
-void adc_init() {
+void adc_init()
+{
   // Register A
-  *my_ADCSRA |= 0x80; // Set Bit 7 to 1
+  *my_ADCSRA |= 0x80;       // Set Bit 7 to 1
   *my_ADCSRA &= 0b11011111; // Clear Bit 5
   *my_ADCSRA &= 0b11110111; // Clear Bit 3
   *my_ADCSRA &= 0b11111000; // Clear bits 2-0
@@ -250,12 +275,14 @@ void adc_init() {
   *my_ADMUX &= 0b11100000; // Clear Bits 4-0
 }
 
-unsigned int adc_read(unsigned char adc_channel_num){
+unsigned int adc_read(unsigned char adc_channel_num)
+{
   // Clear Analog channel selection bits
   *my_ADMUX &= 0b11100000;
   *my_ADMUX &= 0b11011111;
   // Set channel number
-  if (adc_channel_num > 7) {
+  if (adc_channel_num > 7)
+  {
     adc_channel_num -= 8;
     *my_ADCSRB |= 0b00001000;
   }
@@ -263,63 +290,78 @@ unsigned int adc_read(unsigned char adc_channel_num){
   *my_ADMUX += adc_channel_num;
   *my_ADCSRA |= 0b01000000;
   // Wait for conversion to complete and return result
-  while ((*my_ADCSRA & 0x40) != 0);
-  return pow(2 * (*my_ADCH_DATA & (1 << 0)), 8) + pow(2 * (*my_ADCH_DATA & (1 << 1)), 9) + *my_ADCL_DATA; 
+  while ((*my_ADCSRA & 0x40) != 0)
+    ;
+  return pow(2 * (*my_ADCH_DATA & (1 << 0)), 8) + pow(2 * (*my_ADCH_DATA & (1 << 1)), 9) + *my_ADCL_DATA;
 }
 
-void clearLEDS(){
-  // TODO add code to turn off all LEDs set them low
-  *portB &= 0b01111111;
+void clearLEDS()
+{
+  digitalWrite(RED_LED_PIN, LOW);
+  digitalWrite(GREEN_LED_PIN, LOW);
+  digitalWrite(BLUE_LED_PIN, LOW);
+  digitalWrite(YELLOW_LED_PIN, LOW);
 }
 
-bool getDisabledState(){
-  //TODO add code to check if disabled button is pressed
-  return false;
+bool getDisabledState()
+{
+  int btnPushed = digitalRead(DIS_EN_BTN_PIN);
+  if (btnPushed == HIGH && dis_en_btn_state == 1)
+  {
+    dis_en_btn_state = 0;
+    return true;
+  }
+  else
+  {
+    dis_en_btn_state = 1;
+    return false;
+  }
 }
 
-void setSevoPosition(){
+void setSevoPosition()
+{
   // TODO add code to get position of servo
   // have one button increment and another decrement
-//  myServo.write(servoPos);
+  //  myServo.write(servoPos);
 }
 
-//void printTime(){
-//  rtc.getTime();
-//  Serial.print(rtc.hour, DEC);
-//  Serial.print(":");
-//  Serial.print(rtc.minute, DEC);
-//  Serial.print(":");
-//  Serial.print(rtc.second, DEC);
-//  Serial.print("  ");
-//  Serial.print(rtc.month, DEC);
-//  Serial.print("/");
-//  Serial.print(rtc.dayOfMonth, DEC);
-//  Serial.print("/");
-//  Serial.print(rtc.year+2000, DEC);
-//  Serial.print(" ");
-//  Serial.print(rtc.dayOfMonth);
-//  Serial.print("*");
-//  switch (rtc.dayOfWeek){
-//      case MON:
-//      Serial.print("MON");
-//      break;
-//      case TUE:
-//      Serial.print("TUE");
-//      break;
-//      case WED:
-//      Serial.print("WED");
-//      break;
-//      case THU:
-//      Serial.print("THU");
-//      break;
-//      case FRI:
-//      Serial.print("FRI");
-//      break;
-//      case SAT:
-//      Serial.print("SAT");
-//      break;
-//      case SUN:
-//      Serial.print("SUN");
-//      break;
-//  }
-//  Serial.println(" ");
+// void printTime(){
+//   rtc.getTime();
+//   Serial.print(rtc.hour, DEC);
+//   Serial.print(":");
+//   Serial.print(rtc.minute, DEC);
+//   Serial.print(":");
+//   Serial.print(rtc.second, DEC);
+//   Serial.print("  ");
+//   Serial.print(rtc.month, DEC);
+//   Serial.print("/");
+//   Serial.print(rtc.dayOfMonth, DEC);
+//   Serial.print("/");
+//   Serial.print(rtc.year+2000, DEC);
+//   Serial.print(" ");
+//   Serial.print(rtc.dayOfMonth);
+//   Serial.print("*");
+//   switch (rtc.dayOfWeek){
+//       case MON:
+//       Serial.print("MON");
+//       break;
+//       case TUE:
+//       Serial.print("TUE");
+//       break;
+//       case WED:
+//       Serial.print("WED");
+//       break;
+//       case THU:
+//       Serial.print("THU");
+//       break;
+//       case FRI:
+//       Serial.print("FRI");
+//       break;
+//       case SAT:
+//       Serial.print("SAT");
+//       break;
+//       case SUN:
+//       Serial.print("SUN");
+//       break;
+//   }
+//   Serial.println(" ");
