@@ -68,6 +68,7 @@ void clearLEDS();
 bool getDisabledState();
 unsigned int adc_read(unsigned char);
 void setServoPos();
+void fanSpeedController(int);
 
 // TODO set all pins
 // definitions
@@ -80,14 +81,15 @@ void setServoPos();
 #define GREEN_LED_PIN 8
 #define RED_LED_PIN 7
 #define BLUE_LED_PIN 6
-#define INCREMENT_SERVO_ANGLE
-#define DECREMENT_SERVO_ANGLE
-#define SERVO_PIN
+#define INCREMENT_SERVO_ANGLE A5
+#define DECREMENT_SERVO_ANGLE A6
+#define SERVO_PIN A7
+#define FAN_SPEED 200
+#define FAN_PIN 38
 
 // global variables
 int servoPos = 0;
-
-// 0 means disabled, 1 means enabled
+// 0 means disabled, 1 means enabled. by default system should be enabled
 int dis_en_btn_state = 1;
 
 // TODO set pin values for lcd
@@ -95,9 +97,9 @@ int dis_en_btn_state = 1;
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 DHT dht(DHT_IPIN, DHT11);
-Servo myServo(SERVO_PIN);
+// Servo myServo(SERVO_PIN);
 DS1307 rtc;
-RTCDateTime dt;
+// DateTime dt;
 
 // DIGITAL PORT B REGISTERS
 volatile unsigned char *portB = (unsigned char *)0x25;
@@ -121,17 +123,18 @@ void setup()
   *portDDRB &= 0b01111111;
   *portDDRB |= 0b01111110;
   rtc.begin();
-  clock.setTime(__DATE__, __TIME__);
+  //  clock.setTime(__DATE__, __TIME__);
 }
 
 void loop()
 {
-  displayHumidTemp();
+  //  displayHumidTemp();
   // digitalWrite(GREEN_LED_PIN, HIGH);
   // digitalWrite(RED_LED_PIN, HIGH);
   // digitalWrite(BLUE_LED_PIN, HIGH);
   // digitalWrite(YELLOW_LED_PIN, HIGH);
-  delay(500);
+  //  delay(500);
+  printTime();
   int waterLevel = analogRead(WATER_SENSOR_INPUT);
   checkWaterLevel(waterLevel);
   int tempState;
@@ -141,12 +144,12 @@ void loop()
   bool isError = false;
 
   int state = getState();
-  bool isDisabled = getDisabledState();
-  if (!isDisabled)
+  if (dis_en_btn_state)
   {
     clearLEDS();
     do
     {
+      getDisabledState();
       tempState = getState();
       switch (state)
       {
@@ -167,7 +170,7 @@ void loop()
         break;
       case 3:
         disabled_state();
-        isDisabled = true;
+        //        isDisabled = true;
         break;
       }
       delay(500);
@@ -180,7 +183,6 @@ void loop()
     state = getState();
     delay(500);
   }
-}
 }
 
 void displayHumidTemp()
@@ -219,17 +221,6 @@ int getState()
   int waterLevel = analogRead(WATER_SENSOR_INPUT);
   float t = dht.readTemperature();
   dht.read(DHT_IPIN);
-
-  /*if (waterLevel < WATER_LEVEL_THRESHOLD)
-  {
-    // error
-    return 0;
-  }
-  else if (t > TEMP_HIGH_THRESHOLD)
-  {
-    // running
-    return 1;
-  }*/
   if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
   {
     // idle
@@ -254,30 +245,34 @@ int getState()
 /* States */
 void disabled_state()
 {
+  digitalWrite(YELLOW_LED_PIN, HIGH);
+  fanSpeedController(0);
   // TODO add code to send date from realtime rtc to host computer
   //  printTime();
-  digitalWrite(YELLOW_LED_PIN, HIGH);
 }
 
 void idle_state()
 {
+  digitalWrite(GREEN_LED_PIN, HIGH);
   displayHumidTemp();
   setSevoPosition();
-  digitalWrite(GREEN_LED_PIN, HIGH);
+  fanSpeedController(0);
 }
 
 void error_state()
 {
+  digitalWrite(RED_LED_PIN, HIGH);
   displayHumidTemp();
   setSevoPosition();
-  digitalWrite(RED_LED_PIN, HIGH);
+  fanSpeedController(0);
 }
 
 void running_state()
 {
+  digitalWrite(BLUE_LED_PIN, HIGH);
   displayHumidTemp();
   setSevoPosition();
-  digitalWrite(BLUE_LED_PIN, HIGH);
+  fanSpeedController(1);
 }
 
 /* Analog/Digital Conversion */
@@ -328,16 +323,33 @@ void clearLEDS()
   digitalWrite(YELLOW_LED_PIN, LOW);
 }
 
+void fanSpeedController(int enable)
+{
+  if (enable)
+  {
+
+    int temp = dht.readTemperature();
+    if (temp > TEMP_HIGH_THRESHOLD)
+    {
+      analogWrite(FAN_PIN, FAN_SPEED);
+    }
+    else if (temp < TEMP_HIGH_THRESHOLD)
+    {
+      analogWrite(FAN_PIN, 0);
+    }
+  }
+}
+
 bool getDisabledState()
 {
   int btnPushed = digitalRead(DIS_EN_BTN_PIN);
-  Serial.print(btnPushed);
+  // Serial.print(btnPushed);
   if (btnPushed == HIGH && dis_en_btn_state == 1)
   {
     dis_en_btn_state = 0;
     return true;
   }
-  else
+  else if (btnPushed == HIGH && dis_en_btn_state == 0)
   {
     dis_en_btn_state = 1;
     return false;
@@ -361,43 +373,45 @@ void setSevoPosition()
   }
 }
 
-// void printTime(){
-//   rtc.getTime();
-//   Serial.print(rtc.hour, DEC);
-//   Serial.print(":");
-//   Serial.print(rtc.minute, DEC);
-//   Serial.print(":");
-//   Serial.print(rtc.second, DEC);
-//   Serial.print("  ");
-//   Serial.print(rtc.month, DEC);
-//   Serial.print("/");
-//   Serial.print(rtc.dayOfMonth, DEC);
-//   Serial.print("/");
-//   Serial.print(rtc.year+2000, DEC);
-//   Serial.print(" ");
-//   Serial.print(rtc.dayOfMonth);
-//   Serial.print("*");
-//   switch (rtc.dayOfWeek){
-//       case MON:
-//       Serial.print("MON");
-//       break;
-//       case TUE:
-//       Serial.print("TUE");
-//       break;
-//       case WED:
-//       Serial.print("WED");
-//       break;
-//       case THU:
-//       Serial.print("THU");
-//       break;
-//       case FRI:
-//       Serial.print("FRI");
-//       break;
-//       case SAT:
-//       Serial.print("SAT");
-//       break;
-//       case SUN:
-//       Serial.print("SUN");
-//       break;
-//   }
-//   Serial.println(" ");
+void printTime()
+{
+//  Serial.print(rtc.now());
+  //   Serial.print(rtc.hour, DEC);
+  //   Serial.print(":");
+  //   Serial.print(rtc.minute, DEC);
+  //   Serial.print(":");
+  //   Serial.print(rtc.second, DEC);
+  //   Serial.print("  ");
+  //   Serial.print(rtc.month, DEC);
+  //   Serial.print("/");
+  //   Serial.print(rtc.dayOfMonth, DEC);
+  //   Serial.print("/");
+  //   Serial.print(rtc.year+2000, DEC);
+  //   Serial.print(" ");
+  //   Serial.print(rtc.dayOfMonth);
+  //   Serial.print("*");
+  //   switch (rtc.dayOfWeek){
+  //       case MON:
+  //       Serial.print("MON");
+  //       break;
+  //       case TUE:
+  //       Serial.print("TUE");
+  //       break;
+  //       case WED:
+  //       Serial.print("WED");
+  //       break;
+  //       case THU:
+  //       Serial.print("THU");
+  //       break;
+  //       case FRI:
+  //       Serial.print("FRI");
+  //       break;
+  //       case SAT:
+  //       Serial.print("SAT");
+  //       break;
+  //       case SUN:
+  //       Serial.print("SUN");
+  //       break;
+  //   }
+  //   Serial.println(" ");
+}
