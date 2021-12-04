@@ -128,13 +128,6 @@ void setup()
 
 void loop()
 {
-  //  displayHumidTemp();
-  // digitalWrite(GREEN_LED_PIN, HIGH);
-  // digitalWrite(RED_LED_PIN, HIGH);
-  // digitalWrite(BLUE_LED_PIN, HIGH);
-  // digitalWrite(YELLOW_LED_PIN, HIGH);
-  //  delay(500);
-  printTime();
   int waterLevel = analogRead(WATER_SENSOR_INPUT);
   checkWaterLevel(waterLevel);
   int tempState;
@@ -144,7 +137,8 @@ void loop()
   bool isError = false;
 
   int state = getState();
-  if (dis_en_btn_state)
+  getDisabledState();
+  if (dis_en_btn_state == 1)
   {
     clearLEDS();
     do
@@ -168,19 +162,21 @@ void loop()
         isIdle = true;
         idle_state();
         break;
-      case 3:
-        disabled_state();
-        //        isDisabled = true;
+//      case 3:
+//        disabled_state();
+//        //        isDisabled = true;
+//        break;
+      default:
         break;
       }
       delay(500);
-    } while (state != tempState);
+    } while (state == tempState && dis_en_btn_state == 1);
     clearLEDS();
   }
   else
   {
     disabled_state();
-    state = getState();
+    // state = getState();
     delay(500);
   }
 }
@@ -236,7 +232,7 @@ int getState()
     // error
     return 0;
   }
-  else if (getDisabledState)
+  else if (dis_en_btn_state == 0)
   {
     return 3;
   }
@@ -343,7 +339,7 @@ void fanSpeedController(int enable)
 bool getDisabledState()
 {
   int btnPushed = digitalRead(DIS_EN_BTN_PIN);
-  // Serial.print(btnPushed);
+//   Serial.print(btnPushed);
   if (btnPushed == HIGH && dis_en_btn_state == 1)
   {
     dis_en_btn_state = 0;
@@ -354,6 +350,7 @@ bool getDisabledState()
     dis_en_btn_state = 1;
     return false;
   }
+//  delay(250);
 }
 
 void setSevoPosition()
@@ -375,7 +372,7 @@ void setSevoPosition()
 
 void printTime()
 {
-//  Serial.print(rtc.now());
+  //  Serial.print(rtc.now());
   //   Serial.print(rtc.hour, DEC);
   //   Serial.print(":");
   //   Serial.print(rtc.minute, DEC);
