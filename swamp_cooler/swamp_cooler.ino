@@ -1,8 +1,9 @@
 /**************************************************************************************************************************************
 FILENAME: swamp_cooler.ino
-AUTHOR: Samuel Lehman, Gordan Tan
+Group 21
+AUTHOR: Samuel Lehman, Gordon Tan
 DATE: 12/5/2021
-DESCRIPTION: code for a swamp cooler CPE 301
+DESCRIPTION: Code for a swamp cooler CPE 301
 **************************************************************************************************************************************/
 // for lcd1602
 #include <LiquidCrystal.h>
@@ -76,7 +77,7 @@ void setup()
 
 void loop()
 {
-  waterLevel = analogRead(WATER_SENSOR_INPUT);
+  waterLevel = adcRead(WATER_SENSOR_INPUT);
   checkWaterLevel();
   int tempState;
 
