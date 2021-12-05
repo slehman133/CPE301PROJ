@@ -2,45 +2,7 @@
 FILENAME: swamp_cooler.ino
 AUTHOR: Samuel Lehman, Gordan Tan
 DATE: 12/5/2021
-DESCRIPTION: code for a swamp cooler
-
-Project should:
-Monitor the water levels in a reservoir and print an alert when the level is too low
-Monitor and display the current air temp and humidity on an LCD screen
-Start and stop a fan motor as needed when the temperature falls out of a specified range (high or low)
-Allow a user to use a control to adjust the angle of an output vent from the system
-Allow a user to enable or disable the system using an on/off button
-Record the time and date every time the motor is turned on or off. This information should be transmitted to a host computer (over USB)
-
-Cooler states:
-All states except DISABLED
-
-Humidity and temperature should be continuously monitored and reported on the LDC screen
-The system should respond to changes in vent position control
-Stop button should turn off motor (if on) and system should go to DISABLED state
-DISABLED
-
-YELLOW LED should be lit
-No monitoring of temperature or water should be performed
-The start button should be monitored
-IDLE
-
-The system should monitor temperature and transition to running state when temperature > threshold (you determine the threshold)
-The exact time (using real-time rtc) should record transition times
-The water level should be continuously monitored and the state changed to error if the level is too low
-GREEN LED should be lit
-ERROR
-
-RED LED should be turned on (all other LEDs turned off)
-The motor should be off and not start regardless of temperature
-The system should transition to IDLE as soon as the water is at an acceptable level
-An error message should be displayed on LCD
-RUNNING
-
-BLUE LED should be turned on (all other LEDs turned off)
-The motor should be on
-The system should transition to IDLE as soon as the temperature drops below the lower threshold
-The system should transition to the ERROR state if water becomes too low
+DESCRIPTION: code for a swamp cooler CPE 301
 **************************************************************************************************************************************/
 // for lcd1602
 #include <LiquidCrystal.h>
@@ -49,33 +11,30 @@ The system should transition to the ERROR state if water becomes too low
 #include <Servo.h>
 
 // for dth11
-//#include <Adafruit_10DOF.h>
 #include <DHT.h>
 
 // for rDS1307 RTC (real time rtc)
-#include <RTC.h>
+#include <RTClib.h>
 
 // prototypes
 void displayHumidTemp();
-void checkWaterLevel(int);
+void checkWaterLevel();
 int getState();
 void disabled_state();
 void idle_state();
 void error_state();
 void running_state();
-void adc_init();
 void clearLEDS();
-bool getDisabledState();
+void getButtonPushed();
 unsigned int adc_read(unsigned char);
 void setServoPos();
 void fanSpeedController(int);
 
-// TODO set all pins
 // definitions
 #define DHT_IPIN A1
 #define WATER_SENSOR_INPUT A0
-#define WATER_LEVEL_THRESHOLD 50
-#define TEMP_HIGH_THRESHOLD 80
+#define WATER_LEVEL_THRESHOLD 10
+#define TEMP_HIGH_THRESHOLD 0
 #define DIS_EN_BTN_PIN A2
 #define YELLOW_LED_PIN 9
 #define GREEN_LED_PIN 8
@@ -84,107 +43,100 @@ void fanSpeedController(int);
 #define INCREMENT_SERVO_ANGLE A5
 #define DECREMENT_SERVO_ANGLE A6
 #define SERVO_PIN A7
-#define FAN_SPEED 200
-#define FAN_PIN 38
+#define FAN_SPEED 255
+#define FAN_PIN 13
 
 // global variables
 int servoPos = 0;
-// 0 means disabled, 1 means enabled. by default system should be enabled
-int dis_en_btn_state = 1;
+// 0 means disabled, 1 means enabled. by default system should be disabled
+int dis_en_btn_state;
+float h;
+float t;
+int waterLevel;
+int state;
+DateTime now;
 
-// TODO set pin values for lcd
 // creates object lcd(pins)
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 DHT dht(DHT_IPIN, DHT11);
-// Servo myServo(SERVO_PIN);
-DS1307 rtc;
-// DateTime dt;
-
-// DIGITAL PORT B REGISTERS
-volatile unsigned char *portB = (unsigned char *)0x25;
-volatile unsigned char *portDDRB = (unsigned char *)0x24;
-volatile unsigned char *pinB = (unsigned char *)0x23;
-
-// ANALOG
-volatile unsigned char *my_ADMUX = (unsigned char *)0x7C;
-volatile unsigned char *my_ADCSRB = (unsigned char *)0x7B;
-volatile unsigned char *my_ADCSRA = (unsigned char *)0x7A;
-volatile unsigned int *my_ADCH_DATA = (unsigned int *)0x79;
-volatile unsigned int *my_ADCL_DATA = (unsigned int *)0x78;
+Servo myServo;
+RTC_DS1307 rtc;
 
 void setup()
 {
   Serial.begin(9600);
-  adc_init();
   lcd.begin(16, 2);
   dht.begin();
-  *portB &= 0b01111111;
-  *portDDRB &= 0b01111111;
-  *portDDRB |= 0b01111110;
+  myServo.attach(SERVO_PIN);
+  dis_en_btn_state = 0;
   rtc.begin();
-  //  clock.setTime(__DATE__, __TIME__);
+  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
 }
 
 void loop()
 {
-  int waterLevel = analogRead(WATER_SENSOR_INPUT);
-  checkWaterLevel(waterLevel);
+  waterLevel = analogRead(WATER_SENSOR_INPUT);
+  checkWaterLevel();
   int tempState;
 
-  bool isRunning = false;
-  bool isIdle = false;
-  bool isError = false;
-
-  int state = getState();
-  getDisabledState();
+  state = getState();
   if (dis_en_btn_state == 1)
   {
     clearLEDS();
     do
     {
-      getDisabledState();
       tempState = getState();
+      Serial.print("\n");
+      Serial.print("Current state: ");
+      Serial.print(state);
+      Serial.print("\n");
+      Serial.print("Temp state: ");
+      Serial.print(tempState);
+      Serial.print("\n");
+      Serial.print("Current btn state: ");
+      Serial.print(dis_en_btn_state);
+      Serial.print("\n");
+
       switch (state)
       {
-      // error
       case 0:
-        isError = true;
         error_state();
         break;
-      // running
       case 1:
-        isRunning = true;
         running_state();
         break;
-      // idle
       case 2:
-        isIdle = true;
         idle_state();
         break;
-//      case 3:
-//        disabled_state();
-//        //        isDisabled = true;
-//        break;
       default:
         break;
       }
-      delay(500);
-    } while (state == tempState && dis_en_btn_state == 1);
+      delay(2000);
+    } while (dis_en_btn_state == 1 && tempState == state);
     clearLEDS();
   }
-  else
+  else if (dis_en_btn_state == 0)
   {
     disabled_state();
-    // state = getState();
-    delay(500);
+    delay(2000);
+    Serial.print("\n");
+    Serial.print("Current state: ");
+    Serial.print(state);
+    Serial.print("\n");
+    Serial.print("Temp state: ");
+    Serial.print(tempState);
+    Serial.print("\n");
+    Serial.print("Current btn state: ");
+    Serial.print(dis_en_btn_state);
+    Serial.print("\n");
   }
 }
 
 void displayHumidTemp()
 {
-  float h = dht.readHumidity();
-  float t = dht.readTemperature();
+  h = dht.readHumidity();
+  t = dht.readTemperature();
   dht.read(DHT_IPIN);
   lcd.setCursor(0, 0);
   lcd.print("Temp: ");
@@ -192,17 +144,14 @@ void displayHumidTemp()
   lcd.setCursor(0, 1);
   lcd.print("Humid: ");
   lcd.print(h);
-  Serial.print("Temp: ");
-  Serial.print(t);
-  Serial.print("Humid: ");
-  Serial.print(h);
   delay(500);
 }
 
-void checkWaterLevel(int waterLevel)
+void checkWaterLevel()
 {
-  if (waterLevel < 20)
+  if (waterLevel < WATER_LEVEL_THRESHOLD)
   {
+    Serial.print("\n");
     Serial.print("WARNING: Water level low");
     Serial.print("\t");
     Serial.print("Current level: ");
@@ -214,13 +163,13 @@ void checkWaterLevel(int waterLevel)
 
 int getState()
 {
-  int waterLevel = analogRead(WATER_SENSOR_INPUT);
-  float t = dht.readTemperature();
+  waterLevel = analogRead(WATER_SENSOR_INPUT);
+  t = dht.readTemperature();
   dht.read(DHT_IPIN);
-  if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
+  getButtonPushed();
+  if (dis_en_btn_state == 0)
   {
-    // idle
-    return 2;
+    return 3;
   }
   else if (waterLevel > WATER_LEVEL_THRESHOLD && t > TEMP_HIGH_THRESHOLD)
   {
@@ -232,9 +181,10 @@ int getState()
     // error
     return 0;
   }
-  else if (dis_en_btn_state == 0)
+  else if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
   {
-    return 3;
+    // idle
+    return 2;
   }
 }
 
@@ -243,72 +193,34 @@ void disabled_state()
 {
   digitalWrite(YELLOW_LED_PIN, HIGH);
   fanSpeedController(0);
-  // TODO add code to send date from realtime rtc to host computer
-  //  printTime();
+  getButtonPushed();
 }
 
 void idle_state()
 {
   digitalWrite(GREEN_LED_PIN, HIGH);
   displayHumidTemp();
-  setSevoPosition();
+  setServoPos();
   fanSpeedController(0);
+  getButtonPushed();
 }
 
 void error_state()
 {
   digitalWrite(RED_LED_PIN, HIGH);
   displayHumidTemp();
-  setSevoPosition();
+  setServoPos();
   fanSpeedController(0);
+  getButtonPushed();
 }
 
 void running_state()
 {
   digitalWrite(BLUE_LED_PIN, HIGH);
   displayHumidTemp();
-  setSevoPosition();
+  setServoPos();
   fanSpeedController(1);
-}
-
-/* Analog/Digital Conversion */
-void adc_init()
-{
-  // Register A
-  *my_ADCSRA |= 0x80;       // Set Bit 7 to 1
-  *my_ADCSRA &= 0b11011111; // Clear Bit 5
-  *my_ADCSRA &= 0b11110111; // Clear Bit 3
-  *my_ADCSRA &= 0b11111000; // Clear bits 2-0
-
-  // Register B
-  *my_ADCSRB &= 0b11110111; // Clear bit 3
-  *my_ADCSRB &= 0b11111000; // Clear bit 2-0
-
-  // MUX
-  *my_ADMUX &= 0b01111111; // Clear bit 7
-  *my_ADMUX |= 0b01000000; // Set bit 6
-  *my_ADMUX &= 0b11011111; // Clear bit 5. Right adjusted result.
-  *my_ADMUX &= 0b11100000; // Clear Bits 4-0
-}
-
-unsigned int adc_read(unsigned char adc_channel_num)
-{
-  // Clear Analog channel selection bits
-  *my_ADMUX &= 0b11100000;
-  *my_ADMUX &= 0b11011111;
-  // Set channel number
-  if (adc_channel_num > 7)
-  {
-    adc_channel_num -= 8;
-    *my_ADCSRB |= 0b00001000;
-  }
-  // Set channel selection bits
-  *my_ADMUX += adc_channel_num;
-  *my_ADCSRA |= 0b01000000;
-  // Wait for conversion to complete and return result
-  while ((*my_ADCSRA & 0x40) != 0)
-    ;
-  return pow(2 * (*my_ADCH_DATA & (1 << 0)), 8) + pow(2 * (*my_ADCH_DATA & (1 << 1)), 9) + *my_ADCL_DATA;
+  getButtonPushed();
 }
 
 void clearLEDS()
@@ -324,91 +236,91 @@ void fanSpeedController(int enable)
   if (enable)
   {
 
-    int temp = dht.readTemperature();
-    if (temp > TEMP_HIGH_THRESHOLD)
+    t = dht.readTemperature();
+    if (t > TEMP_HIGH_THRESHOLD)
     {
       analogWrite(FAN_PIN, FAN_SPEED);
     }
-    else if (temp < TEMP_HIGH_THRESHOLD)
+    else if (t < TEMP_HIGH_THRESHOLD)
     {
       analogWrite(FAN_PIN, 0);
     }
   }
+  else
+  {
+    analogWrite(FAN_PIN, 0);
+  }
 }
 
-bool getDisabledState()
+void getButtonPushed()
 {
-  int btnPushed = digitalRead(DIS_EN_BTN_PIN);
-//   Serial.print(btnPushed);
+  btnPushed = digitalRead(DIS_EN_BTN_PIN);
   if (btnPushed == HIGH && dis_en_btn_state == 1)
   {
     dis_en_btn_state = 0;
-    return true;
+    printTime();
+    delay(1000);
   }
   else if (btnPushed == HIGH && dis_en_btn_state == 0)
   {
     dis_en_btn_state = 1;
-    return false;
+    printTime();
+    delay(1000);
   }
-//  delay(250);
 }
 
-void setSevoPosition()
+void setServoPos()
 {
-  int incBtn = digitalRead(INCREMENT_SERVO_ANGLE);
-  int decBtn = digitalRead(DECREMENT_SERVO_ANGLE);
-
+  int incBtn = analogRead(INCREMENT_SERVO_ANGLE);
+  int decBtn = analogRead(DECREMENT_SERVO_ANGLE);
   if (incBtn == HIGH)
   {
-    if (servoPos <= 180)
+    if (servoPos < 180)
       servoPos++;
   }
   if (decBtn == HIGH)
   {
-    if (servoPos >= 0)
+    if (servoPos > 0)
       servoPos--;
   }
+  myServo.write(servoPos);
 }
 
 void printTime()
 {
-  //  Serial.print(rtc.now());
-  //   Serial.print(rtc.hour, DEC);
-  //   Serial.print(":");
-  //   Serial.print(rtc.minute, DEC);
-  //   Serial.print(":");
-  //   Serial.print(rtc.second, DEC);
-  //   Serial.print("  ");
-  //   Serial.print(rtc.month, DEC);
-  //   Serial.print("/");
-  //   Serial.print(rtc.dayOfMonth, DEC);
-  //   Serial.print("/");
-  //   Serial.print(rtc.year+2000, DEC);
-  //   Serial.print(" ");
-  //   Serial.print(rtc.dayOfMonth);
-  //   Serial.print("*");
-  //   switch (rtc.dayOfWeek){
-  //       case MON:
-  //       Serial.print("MON");
-  //       break;
-  //       case TUE:
-  //       Serial.print("TUE");
-  //       break;
-  //       case WED:
-  //       Serial.print("WED");
-  //       break;
-  //       case THU:
-  //       Serial.print("THU");
-  //       break;
-  //       case FRI:
-  //       Serial.print("FRI");
-  //       break;
-  //       case SAT:
-  //       Serial.print("SAT");
-  //       break;
-  //       case SUN:
-  //       Serial.print("SUN");
-  //       break;
-  //   }
-  //   Serial.println(" ");
+  DateTime now = rtc.now();
+  if (dis_en_btn_state == 1)
+  {
+    Serial.print("\n");
+    Serial.print("Enabled: ");
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(") ");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println();
+  }
+  else if (dis_en_btn_state == 0)
+  {
+    Serial.print("\n");
+    Serial.print("Disabled: ");
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(") ");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println();
+  }
 }
