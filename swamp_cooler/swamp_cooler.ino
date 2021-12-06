@@ -33,8 +33,8 @@ void fanSpeedController(int);
 // definitions
 #define DHT_IPIN A1
 #define WATER_SENSOR_INPUT A0
-#define WATER_LEVEL_THRESHOLD 10
-#define TEMP_HIGH_THRESHOLD 0
+#define WATER_LEVEL_THRESHOLD 100
+#define TEMP_HIGH_THRESHOLD 25
 #define DIS_EN_BTN_PIN A2
 #define YELLOW_LED_PIN 9
 #define GREEN_LED_PIN 8
@@ -42,12 +42,12 @@ void fanSpeedController(int);
 #define BLUE_LED_PIN 6
 #define INCREMENT_SERVO_ANGLE A5
 #define DECREMENT_SERVO_ANGLE A6
-#define SERVO_PIN A7
+#define SERVO_PIN 36
 #define FAN_SPEED 255
 #define FAN_PIN 13
 
 // global variables
-int servoPos = 0;
+int servoPos;
 // 0 means disabled, 1 means enabled. by default system should be disabled
 int dis_en_btn_state;
 float h;
@@ -69,15 +69,18 @@ void setup()
   lcd.begin(16, 2);
   dht.begin();
   myServo.attach(SERVO_PIN);
+  servoPos = 0;
   dis_en_btn_state = 0;
   rtc.begin();
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  if (!rtc.isrunning())
+  {
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 }
 
 void loop()
 {
   waterLevel = analogRead(WATER_SENSOR_INPUT);
-  checkWaterLevel();
   int tempState;
 
   state = getState();
@@ -87,17 +90,6 @@ void loop()
     do
     {
       tempState = getState();
-      Serial.print("\n");
-      Serial.print("Current state: ");
-      Serial.print(state);
-      Serial.print("\n");
-      Serial.print("Temp state: ");
-      Serial.print(tempState);
-      Serial.print("\n");
-      Serial.print("Current btn state: ");
-      Serial.print(dis_en_btn_state);
-      Serial.print("\n");
-
       switch (state)
       {
       case 0:
@@ -120,16 +112,6 @@ void loop()
   {
     disabled_state();
     delay(2000);
-    Serial.print("\n");
-    Serial.print("Current state: ");
-    Serial.print(state);
-    Serial.print("\n");
-    Serial.print("Temp state: ");
-    Serial.print(tempState);
-    Serial.print("\n");
-    Serial.print("Current btn state: ");
-    Serial.print(dis_en_btn_state);
-    Serial.print("\n");
   }
 }
 
@@ -176,15 +158,15 @@ int getState()
     // running
     return 1;
   }
-  else if (waterLevel < WATER_LEVEL_THRESHOLD)
-  {
-    // error
-    return 0;
-  }
   else if (waterLevel > WATER_LEVEL_THRESHOLD && t < TEMP_HIGH_THRESHOLD)
   {
     // idle
     return 2;
+  }
+  else
+  {
+    // error
+    return 0;
   }
 }
 
@@ -200,6 +182,7 @@ void idle_state()
 {
   digitalWrite(GREEN_LED_PIN, HIGH);
   displayHumidTemp();
+  checkWaterLevel();
   setServoPos();
   fanSpeedController(0);
   getButtonPushed();
@@ -209,6 +192,7 @@ void error_state()
 {
   digitalWrite(RED_LED_PIN, HIGH);
   displayHumidTemp();
+  checkWaterLevel();
   setServoPos();
   fanSpeedController(0);
   getButtonPushed();
@@ -218,6 +202,7 @@ void running_state()
 {
   digitalWrite(BLUE_LED_PIN, HIGH);
   displayHumidTemp();
+  checkWaterLevel();
   setServoPos();
   fanSpeedController(1);
   getButtonPushed();
@@ -254,7 +239,7 @@ void fanSpeedController(int enable)
 
 void getButtonPushed()
 {
-  btnPushed = digitalRead(DIS_EN_BTN_PIN);
+  int btnPushed = digitalRead(DIS_EN_BTN_PIN);
   if (btnPushed == HIGH && dis_en_btn_state == 1)
   {
     dis_en_btn_state = 0;
@@ -277,11 +262,15 @@ void setServoPos()
   {
     if (servoPos < 180)
       servoPos++;
+
+    Serial.print(incBtn);
   }
   if (decBtn == HIGH)
   {
     if (servoPos > 0)
       servoPos--;
+
+    Serial.print(decBtn);
   }
   myServo.write(servoPos);
 }
@@ -292,7 +281,7 @@ void printTime()
   if (dis_en_btn_state == 1)
   {
     Serial.print("\n");
-    Serial.print("Enabled: ");
+    Serial.print("Enabled: (");
     Serial.print(now.year(), DEC);
     Serial.print('/');
     Serial.print(now.month(), DEC);
@@ -309,7 +298,7 @@ void printTime()
   else if (dis_en_btn_state == 0)
   {
     Serial.print("\n");
-    Serial.print("Disabled: ");
+    Serial.print("Disabled: (");
     Serial.print(now.year(), DEC);
     Serial.print('/');
     Serial.print(now.month(), DEC);
