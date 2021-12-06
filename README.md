@@ -1,2 +1,2 @@
-# CPE301PROJ
+# Group 21
 Team Members: Gordon Tan, Samuel Lehman
