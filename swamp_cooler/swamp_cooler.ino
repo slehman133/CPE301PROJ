@@ -126,6 +126,8 @@ void displayHumidTemp()
   lcd.setCursor(0, 1);
   lcd.print("Humid: ");
   lcd.print(h);
+  Serial.print("\n");
+  Serial.print(t);
   delay(500);
 }
 
@@ -262,15 +264,11 @@ void setServoPos()
   {
     if (servoPos < 180)
       servoPos++;
-
-    Serial.print(incBtn);
   }
   if (decBtn == HIGH)
   {
     if (servoPos > 0)
       servoPos--;
-
-    Serial.print(decBtn);
   }
   myServo.write(servoPos);
 }
